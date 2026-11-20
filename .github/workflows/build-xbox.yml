@@ -1,0 +1,51 @@
+name: Build EarthBound Xbox (nxdk)
+
+# Repositório: coloque a pasta xbox/ (do seu zip) na raiz + este arquivo.
+# O workflow baixa o Phase-Distorter original, encaixa sua pasta xbox/ nele
+# (o Makefile espera xbox/ ao lado de cpp/ e generated/) e compila.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Seu port (pasta xbox/)
+        uses: actions/checkout@v4
+        with:
+          path: port
+
+      - name: Phase-Distorter original
+        uses: actions/checkout@v4
+        with:
+          repository: TheRunaway5/Phase-Distorter
+          path: ph
+          # ref: 0.5   # descomente/ajuste se o port foi feito para uma versão específica
+
+      - name: nxdk (com todos os submódulos nas versões certas)
+        run: git clone --recurse-submodules --depth 1 https://github.com/XboxDev/nxdk.git nxdk
+
+      - name: Dependências
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld llvm cmake flex bison python3 build-essential
+
+      - name: Encaixar xbox/ no upstream
+        run: cp -r port/xbox ph/xbox
+
+      - name: Compilar
+        run: |
+          eval "$($GITHUB_WORKSPACE/nxdk/bin/activate -s)"
+          make -C ph/xbox NXDK_DIR=$GITHUB_WORKSPACE/nxdk -j$(nproc)
+
+      - name: Publicar resultado
+        uses: actions/upload-artifact@v4
+        with:
+          name: EarthBound-Xbox
+          path: |
+            ph/xbox/bin/default.xbe
+            ph/xbox/EarthBound.iso
