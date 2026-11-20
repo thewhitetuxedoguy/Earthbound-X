@@ -8,6 +8,10 @@
 
 namespace eb::xbox {
 
+namespace {
+constexpr unsigned int kPcrtcStart = 0x00600800; // CRTC scanout start address
+}
+
 Screen::Screen(ScreenFit fit) : fit_(fit) {
     XVideoSetMode(kWidth, kHeight, 32, REFRESH_DEFAULT);
     refresh_hz_ = XVideoGetMode().refresh > 0 ? XVideoGetMode().refresh : 60;
@@ -62,7 +66,10 @@ void Screen::present(std::span<const std::uint32_t, kSourceWidth * kSourceHeight
     if (back_) {
         // Flip during vblank so the scanout never shows a half-drawn frame.
         XVideoWaitForVBlank();
-        XVideoSetFB(back_);
+        // XVideoSetFB() asserts that the pointer has bit 31 clear, but contiguous-memory
+        // pointers are kernel virtual addresses (0x80000000 | physical). Program the CRTC
+        // start register directly with the physical address instead (same as the HAL does).
+        VIDEOREG(kPcrtcStart) = static_cast<unsigned int>(reinterpret_cast<std::uintptr_t>(back_)) & 0x7FFFFFFFu;
         std::uint8_t *shown = back_;
         back_ = front_;
         front_ = shown;
